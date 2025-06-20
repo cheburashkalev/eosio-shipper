@@ -49,3 +49,8 @@ SHiP uses websockets to communicate.
 * The response you get back is slightly different depending on what version you are running against. The demo program just sends multiple Get Blocks until it hits the end, and then gets a new status to see where the end is.. 
 
 if you request blocks past the end, it will return 'None'.. 
+
+# Ubuntu 22.04
+```curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh```
+```source $HOME/.cargo/env```
+```sudo apt install libssl-dev pkg-config gcc cmake libboost-dev libboost-date-time-dev```

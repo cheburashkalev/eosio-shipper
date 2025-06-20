@@ -1,11 +1,16 @@
 [package]
-name = "eosio-shipper"
-version = "0.1.1"
-authors = ["Ian Holsman <ian@holsman.com.au>"]
+name = "eosio-shipper-gf"
+version = "0.1.2"
+authors = ["Ian Holsman <ian@holsman.com.au>","Andrei Levchenko <duxan.lev@gmail.com>"]
 edition = "2024"
 keywords = ["eosio", "blockchain"]
 categories = ["api-bindings"]
-
+description = "Rust client for EOS State History Plugin (SHiP) remake by GlobalForce Team"
+license = "MIT"
+homepage = "https://github.com/cheburashkalev/eosio-shipper/tree/master"
+repository = "https://github.com/cheburashkalev/eosio-shipper/tree/master"
+documentation = ""
+readme = "https://raw.githubusercontent.com/cheburashkalev/eosio-shipper/refs/heads/master/README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
