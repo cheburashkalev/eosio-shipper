@@ -8,6 +8,8 @@ extern crate error_chain;
 #[macro_use]
 extern crate log;
 
+use std::any::Any;
+use std::error::Error;
 use crate::errors::Result;
 use eosio_shipper::shipper_types::{
     ContractIndex128, ContractIndex256, ContractIndex64, ContractIndexDouble,
@@ -25,6 +27,8 @@ use std::cmp::min;
 use std::env;
 use std::fs::File;
 use std::io::Write;
+use tokio_tungstenite::connect_async;
+use url::Url;
 
 mod errors {
     error_chain! {
@@ -48,13 +52,13 @@ fn get_args() -> Result<(String, i64, String)> {
     let start_block: i64 = if args.len() > 2 {
         args[2].parse::<i64>().unwrap()
     } else {
-        0
+        200
     };
     let arg = {
         if args.len() > 3 {
             &args[3]
         } else {
-            "P"
+            "D"
         }
     };
 
@@ -364,25 +368,24 @@ async fn main() {
         Ok((host, start_block, run_mode)) => {
             let (mut req_s, req_r) = unbounded::<ShipRequests>();
             let (res_s, mut res_r) = unbounded::<ShipResultsEx>();
-            let fetch_block = run_mode.contains("P");
-            let fetch_traces = run_mode.contains("T");
-            let fetch_deltas = run_mode.contains("D");
+            let fetch_block = true;
+            let fetch_traces = true;
+            let fetch_deltas = true;
+            let url = Url::parse("ws://116.202.173.189:17777").unwrap();
             let ws = async {
-                get_sink_stream(&host, req_r, res_s).await;
+                let res = get_sink_stream(&host, req_r, res_s).await;
+                if res.is_err() {
+                    eprintln!("Error connecting to shipper 2: {:?}", res.unwrap_err());
+                }
+                
             };
             let dumper = async {
-                let mut delta_file: Option<File> = None;
-                let mut perf_file: Option<File> = None;
-                if run_mode.contains("D") {
-                    delta_file = Some(File::create("deltas.txt").unwrap());
-                }
-                if run_mode.contains("P") {
-                    let mut f = File::create("perf.txt").unwrap();
-                    f.write_all(format!("type,block#,first-action,#actions,cpu,net\n").as_bytes());
-                    perf_file = Some(f);
-                }
 
-                req_s.unbounded_send(ShipRequests::get_status_request_v0(GetStatusRequestV0 {}));
+                let res = req_s.unbounded_send(ShipRequests::get_status_request_v0(GetStatusRequestV0 {}));
+                if res.is_err() {
+                    println!("Failed to send status request: {}", res.unwrap_err());
+                    return;
+                }
                 let mut last_block: u32 = 0;
                 let mut direction;
                 let mut current: u32;
@@ -408,8 +411,17 @@ async fn main() {
 
                 let mut last_fetched: u32 = 0;
                 loop {
-                    //   println!("Current= {} -> {}", current, last_fetched);
-                    let sr: ShipResultsEx = res_r.next().await.unwrap();
+                    //println!("Current= {} -> {}", current, last_fetched);
+                    let res_r_raw = res_r.next();
+                    //println!("Current= {:?}",res_r_raw);
+                    let sr_raw = res_r.next().await;
+                    //println!("Current= {:?}",sr_raw);
+                    if sr_raw.is_none() {
+                        
+                        continue;
+                    }
+                    let sr = sr_raw.unwrap();
+
                     debug!("{}-{:?}", last_block, sr);
                     match sr {
                         ShipResultsEx::Status(st) => {
@@ -420,38 +432,38 @@ async fn main() {
                                 last_block
                             );
                             if direction {
-                                last_fetched = min(current + 1 + 150, last_block);
+                                last_fetched = min(current + 1 + 10000, last_block);
 
                                 req_s
                                     .unbounded_send(ShipRequests::get_blocks_request_v0(
                                         GetBlocksRequestV0 {
                                             start_block_num: current + 1,
                                             end_block_num: last_fetched,
-                                            max_messages_in_flight: 150,
+                                            max_messages_in_flight: 10000,
                                             have_positions: vec![],
                                             irreversible_only: false,
-                                            fetch_block,
-                                            fetch_traces,
-                                            fetch_deltas,
+                                            fetch_block: true,
+                                            fetch_traces: false,
+                                            fetch_deltas: false,
                                         },
                                     ))
                                     .unwrap();
                             } else {
                                 direction = true;
                                 current = (st.chain_state_end_block as i64 + start_block) as u32; // start_block would be negative here
-                                last_fetched = min(current + 1 + 150, st.chain_state_end_block);
+                                last_fetched = min(current + 1 + 10000, st.chain_state_end_block);
 
                                 req_s
                                     .unbounded_send(ShipRequests::get_blocks_request_v0(
                                         GetBlocksRequestV0 {
                                             start_block_num: current,
                                             end_block_num: last_fetched,
-                                            max_messages_in_flight: 150,
+                                            max_messages_in_flight: 10000,
                                             have_positions: vec![],
                                             irreversible_only: false,
-                                            fetch_block,
-                                            fetch_traces,
-                                            fetch_deltas,
+                                            fetch_block: true,
+                                            fetch_traces: false,
+                                            fetch_deltas: false,
                                         },
                                     ))
                                     .unwrap();
@@ -465,19 +477,19 @@ async fn main() {
                                 if !blo.traces.is_empty() {
                                     info!("\t-{} #Trace", blo.traces.len())
                                 }
-                                if run_mode.contains("P") {
-                                    match &perf_file {
-                                        Some(x) => handle_performance(&x, current, &blo),
-                                        None => {}
-                                    }
-                                }
-                                if run_mode.contains("D") {
-                                    //  let x = delta_file.unwrap();
-                                    match &delta_file {
-                                        Some(x) => handle_delta(&x, current, &blo),
-                                        None => {}
-                                    }
-                                }
+                                //if run_mode.contains("P") {
+                                //    match &perf_file {
+                                //        Some(x) => handle_performance(&x, current, &blo),
+                                //        None => {}
+                                //    }
+                                //}
+                                //if run_mode.contains("D") {
+                                //    //  let x = delta_file.unwrap();
+                                //    match &delta_file {
+                                //        Some(x) => handle_delta(&x, current, &blo),
+                                //        None => {}
+                                //    }
+                                //}
 
                                 if (current + 1) >= last_block {
                                     debug!("{} reached end {}", current, last_block);
@@ -490,19 +502,19 @@ async fn main() {
                                 // delta_file.sync_data();
                                 } else {
                                     if (current + 1) >= last_fetched {
-                                        last_fetched = min(current + 1 + 150, last_block);
-                                        debug!("GBR-{}->{} {}", current, last_fetched, last_block);
+                                        last_fetched = min(current + 1 + 10000, last_block);
+                                        println!("GBR-{}->{} {}", current, last_fetched, last_block);
                                         req_s
                                             .unbounded_send(ShipRequests::get_blocks_request_v0(
                                                 GetBlocksRequestV0 {
                                                     start_block_num: current + 1,
                                                     end_block_num: last_fetched,
-                                                    max_messages_in_flight: 150,
+                                                    max_messages_in_flight: 10000,
                                                     have_positions: vec![],
                                                     irreversible_only: false,
-                                                    fetch_block,
-                                                    fetch_traces,
-                                                    fetch_deltas,
+                                                    fetch_block:true,
+                                                    fetch_traces:false,
+                                                    fetch_deltas: false,
                                                 },
                                             ))
                                             .unwrap();
@@ -528,6 +540,7 @@ async fn main() {
             };
             pin_mut!(ws, dumper);
             future::join(ws, dumper).await;
+
         }
     }
 

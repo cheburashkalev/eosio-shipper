@@ -239,10 +239,19 @@ impl ShipResultsEx {
                 let (block, trans) = match br.block {
                     None => (None, vec![]),
                     Some(t) => {
-                        let sb: SignedBlock =
-                            ShipResultsEx::convert_block_v0(shipper_abi, &t.as_bytes()).unwrap();
-                        let v_ot: Vec<Option<Transaction>> = sb.get_trx(shipper_abi);
-                        (Some(sb), v_ot)
+
+                        let sb =
+                            ShipResultsEx::convert_block_v0(shipper_abi, &t.as_bytes());
+                        let sb_ = match sb {
+                            Ok(x) => x,
+                            Err(y) =>
+                                {
+                                    //println!("{y}");
+                                    panic!()
+                                },
+                        };
+                        let v_ot: Vec<Option<Transaction>> = sb_.get_trx(shipper_abi);
+                        (Some(sb_), v_ot)
                     }
                 };
 
@@ -298,6 +307,7 @@ impl ShipResultsEx {
             Ok(vec![])
         } else {
             let json = shipper_abi.hex_to_json("eosio", "transaction_trace[]", trace_hex)?;
+            //println!("{}", json);
             let trace_v: Vec<Traces> = serde_json::from_str(&json)?;
             Ok(trace_v)
         }
@@ -321,6 +331,7 @@ impl ShipResultsEx {
                                 let _json =
                                     shipper_abi.hex_to_json("eosio", &name, row.data.as_bytes())?;
                                 let json = format!("{{\"{}\":{}}}", &name, _json);
+                                //println!("{}", json);
                                 let r: TableRowTypes = serde_json::from_str(&json)?;
                                 row_ex.push(TableRowEx {
                                     present: row.present,
@@ -429,7 +440,7 @@ pub struct TransactionTraceV0 {
     pub action_traces: Vec<ActionTraceVariant>,
     pub account_ram_delta: Option<AccountDelta>,
     pub except: Option<String>,
-    pub error_code: Option<u64>,
+    pub error_code: Option<String>,
     pub failed_dtrx_trace: Option<Box<Traces>>,
     pub partial: Option<PartialTransactionVariant>,
 }
@@ -527,12 +538,12 @@ pub struct ActionTraceV0 {
     pub console: String,
     pub account_ram_deltas: Vec<AccountDelta>,
     pub except: Option<String>,
-    pub error_code: Option<u64>,
+    pub error_code: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ActionTraceV1 {
-    pub error_code: Option<u64>,
+    pub error_code: Option<String>,
     pub context_free: bool,
     pub elapsed: String,
     pub except: Option<String>,
@@ -760,6 +771,7 @@ impl Serialize for TransactionVariantV1 {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(transparent)]
 pub struct TransactionID {
     pub transaction_id: String,
 }
@@ -1333,7 +1345,7 @@ pub struct ContractIndexDoubleV0 {
     pub table: String,
     pub primary_key: String,
     pub payer: String,
-    pub secondary_key: String,
+    pub secondary_key: f64,
 }
 
 #[allow(non_camel_case_types)]

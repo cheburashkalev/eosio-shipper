@@ -2,24 +2,28 @@
 name = "eosio-shipper"
 version = "0.1.1"
 authors = ["Ian Holsman <ian@holsman.com.au>"]
-edition = "2018"
+edition = "2024"
 keywords = ["eosio", "blockchain"]
 categories = ["api-bindings"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio-tungstenite = { version = "*", features=["tls"]}
-log = "0.4"
+cc = "1.2.27"
+cmake = "0.1.54"
+openssl-sys = "0.9.58"
+openssl = "0.10.73"
+tokio-tungstenite = { version = "0.27.0"}
+log = "0.4.27"
 futures-util = { version = "0.3", default-features = false, features = ["async-await", "sink", "std"] }
-tokio = { version = "0.2", default-features = false, features = ["io-std", "macros", "stream", "time"] }
+tokio = { version = "1.45.1", default-features = false, features = ["io-std", "macros","rt-multi-thread", "rt", "time"] }
 url = "2.0.0"
 env_logger = "0.7"
-libabieos-sys = { version = "0.3.4"} #, path="../eosio/libabieos-sys" }
+libabieos-sys = { version = "0.3.7"} #, path="../eosio/libabieos-sys" }
 error-chain = "0.12"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-base64-serde = "0.5.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+base64-serde = "0.8.0"
 flate2 = { version ="1.0"} #, features = ["zlib"], default-features = false }
 futures-channel = "0.3"
 chrono="0.4.11"

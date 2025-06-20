@@ -4,7 +4,7 @@ use futures_util::{future, pin_mut, SinkExt, StreamExt};
 //use std::io::prelude::*;
 use rust_embed::RustEmbed;
 use tokio_tungstenite::connect_async;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{Bytes, Message};
 use url::Url;
 // `error_chain!` can recurse deeply
 //#![recursion_limit = "1024"]
@@ -29,7 +29,7 @@ pub async fn get_sink_stream(
     mut in_tx: UnboundedReceiver<ShipRequests>,
     out_rx: UnboundedSender<ShipResultsEx>,
 ) -> Result<()> {
-    let r = connect_async(Url::parse(server_url).expect("Can't connect to server")).await?;
+    let r = connect_async(server_url).await?;
     let socket = r.0;
     let abi_f = String::from_utf8(AbiFiles::get("abi.abi.json").unwrap().as_ref().to_vec())?;
     let abi: ABIEOS = ABIEOS::new_with_abi(EOSIO_SYSTEM, &abi_f)?;
@@ -72,17 +72,17 @@ pub async fn get_sink_stream(
                     match data {
                         ShipRequests::get_status_request_v0(r) => {
                             let req = r.to_bin(&shipper_abi).unwrap();
-                            let msg = Message::Binary(req);
+                            let msg = Message::Binary(Bytes::from(req));
                             sink.send(msg).await.expect("Didn't send");
                         }
                         ShipRequests::get_blocks_request_v0(br) => {
                             let req = br.to_bin(&shipper_abi).unwrap();
-                            let msg = Message::Binary(req);
+                            let msg = Message::Binary(Bytes::from(req));
                             sink.send(msg).await.expect("Didn't send");
                         }
                         ShipRequests::get_blocks_ack_request_v0(ar) => {
                             let req = ar.to_bin(&shipper_abi).unwrap();
-                            let msg = Message::Binary(req);
+                            let msg = Message::Binary(Bytes::from(req));
                             sink.send(msg).await.expect("Didn't send");
                         }
                         ShipRequests::quit => {
