@@ -219,8 +219,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "eosio-shipper"
-version = "0.1.1"
+name = "eosio-shipper-gf"
+version = "0.1.2"
 dependencies = [
  "base64-serde",
  "cc",
