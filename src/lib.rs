@@ -1,5 +1,7 @@
+use error_chain::ChainedError;
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, SinkExt, StreamExt};
+use rs_abieos::{abieos, Abieos};
 //use log::*;
 //use std::io::prelude::*;
 use rust_embed::RustEmbed;
@@ -16,7 +18,6 @@ pub mod errors;
 pub mod shipper_types;
 
 use crate::shipper_types::{ShipRequests, ShipResultsEx};
-use libabieos_sys::{AbiFiles, ABIEOS};
 
 #[derive(RustEmbed)]
 #[folder = "resources/"]
@@ -31,24 +32,21 @@ pub async fn get_sink_stream(
 ) -> Result<()> {
     let r = connect_async(server_url).await?;
     let socket = r.0;
-    let abi_f = String::from_utf8(AbiFiles::get("abi.abi.json").unwrap().as_ref().to_vec())?;
-    let abi: ABIEOS = ABIEOS::new_with_abi(EOSIO_SYSTEM, &abi_f)?;
     let (mut sink, mut stream) = socket.split();
     match stream.next().await {
         Some(msg) => {
             let msg_text = msg
                 .map_err(|e| {
-                    abi.destroy();
                     Error::with_chain(e, "get_sink_stream fail")
                 })?
                 .into_text()
                 .map_err(|e| {
-                    abi.destroy();
                     Error::with_chain(e, "get_sink_stream into_text")
                 })?;
-            let shipper_abi = ABIEOS::new_with_abi(EOSIO_SYSTEM, &msg_text).map_err(|e| {
-                abi.destroy();
-                Error::with_chain(e, "parsing shipper abi")
+            let shipper_abi = Abieos::new();
+            shipper_abi.set_abi_json(EOSIO_SYSTEM, msg_text.to_string()).map_err(|e| {
+                
+                Error::new(ErrorKind::Msg("Error parse ABI".parse().unwrap()), error_chain::State::default())
             })?;
 
             let out_loop = async {
@@ -99,7 +97,6 @@ pub async fn get_sink_stream(
             Ok(())
         }
         None => {
-            abi.destroy();
             Err(ErrorKind::ExpectedABI.into())
         }
     }

@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize, Serializer};
 use crate::errors::Result;
 use chrono::{DateTime, Utc};
 use flate2::read::ZlibDecoder;
-use libabieos_sys::{eosio_datetime_format, hex_to_bin, ABIEOS};
 use log::*;
 use std::fmt;
 use std::io::prelude::*;
+use rs_abieos::Abieos;
 
 lazy_static! {
     static ref ROWTYPES: HashSet<String> = vec![
@@ -77,13 +77,13 @@ pub enum ShipRequests {
 }
 
 impl ShipRequests {
-    pub fn from_bin(shipper_abi: &ABIEOS, bin: &[u8]) -> Result<ShipRequests> {
+    pub fn from_bin(shipper_abi: &Abieos, bin: &[u8]) -> Result<ShipRequests> {
         let mut s: String = String::from("");
         for b in bin {
             let hex = format!("{:02x}", b);
             s += hex.as_str();
         }
-        let json = shipper_abi.hex_to_json("eosio", "request", s.as_bytes())?;
+        let json = shipper_abi.hex_to_json("eosio", "request", s).unwrap();
 
         let sr: ShipRequests = serde_json::from_str(&json)?;
         Ok(sr)
@@ -122,15 +122,15 @@ impl Serialize for ShipRequests {
 pub struct GetStatusRequestV0 {}
 
 impl GetStatusRequestV0 {
-    pub fn to_bin(&self, shipper_abi: &ABIEOS) -> Result<Vec<u8>> {
+    pub fn to_bin(&self, shipper_abi: &Abieos) -> Result<Vec<u8>> {
         let r: ShipRequests = ShipRequests::get_status_request_v0 {
             0: GetStatusRequestV0 {},
         };
         let _json = serde_json::to_string(&r)?;
         let json = "[\"get_status_request_v0\",{}]";
-        let trx = shipper_abi.json_to_bin("eosio", "request", &json);
+        let trx = shipper_abi.json_to_bin("eosio", "request", json.to_string()).unwrap();
 
-        Ok(trx?)
+        Ok(trx)
     }
 }
 
@@ -147,12 +147,12 @@ pub struct GetBlocksRequestV0 {
 }
 
 impl GetBlocksRequestV0 {
-    pub fn to_bin(&self, shipper_abi: &ABIEOS) -> Result<Vec<u8>> {
+    pub fn to_bin(&self, shipper_abi: &Abieos) -> Result<Vec<u8>> {
         let _json = String::from(serde_json::to_string(&self)?);
         let json: String =
             String::from("[\"get_blocks_request_v0\",") + &_json + &String::from("]");
-        let trx = shipper_abi.json_to_bin("eosio", "request", &json);
-        Ok(trx?)
+        let trx = shipper_abi.json_to_bin("eosio", "request", json).unwrap();
+        Ok(trx)
     }
 }
 
@@ -162,12 +162,12 @@ pub struct GetBlocksACKRequestV0 {
 }
 
 impl GetBlocksACKRequestV0 {
-    pub fn to_bin(&self, shipper_abi: &ABIEOS) -> Result<Vec<u8>> {
+    pub fn to_bin(&self, shipper_abi: &Abieos) -> Result<Vec<u8>> {
         let _json = String::from(serde_json::to_string(&self)?);
         let json: String =
             String::from("[\"get_blocks_ack_request_v0\",") + &_json + &String::from("]");
-        let trx = shipper_abi.json_to_bin("eosio", "request", &json);
-        Ok(trx?)
+        let trx = shipper_abi.json_to_bin("eosio", "request", json).unwrap();
+        Ok(trx)
     }
 }
 
@@ -217,13 +217,13 @@ pub enum ShipResultsEx {
 }
 
 impl ShipResultsEx {
-    pub fn from_bin(shipper_abi: &ABIEOS, bin: &[u8]) -> Result<ShipResultsEx> {
+    pub fn from_bin(shipper_abi: &Abieos, bin: &[u8]) -> Result<ShipResultsEx> {
         let mut s: String = String::from("");
         for b in bin {
             let hex = format!("{:02x}", b);
             s += hex.as_str();
         }
-        let json = shipper_abi.hex_to_json("eosio", "result", s.as_bytes())?;
+        let json = shipper_abi.hex_to_json("eosio", "result", s).unwrap();
         debug!("{}", json);
         let sr: ShipResults = serde_json::from_str(&json)?;
         match sr {
@@ -302,22 +302,22 @@ impl ShipResultsEx {
             //_ => Err("Invalid response to block response".into()),
         }
     }
-    fn convert_traces(shipper_abi: &ABIEOS, trace_hex: &[u8]) -> Result<Vec<Traces>> {
+    fn convert_traces(shipper_abi: &Abieos, trace_hex: &[u8]) -> Result<Vec<Traces>> {
         if trace_hex.len() == 0 {
             Ok(vec![])
         } else {
-            let json = shipper_abi.hex_to_json("eosio", "transaction_trace[]", trace_hex)?;
+            let json = shipper_abi.hex_to_json("eosio", "transaction_trace[]", String::from_utf8(trace_hex.to_vec())?).unwrap();
             //println!("{}", json);
             let trace_v: Vec<Traces> = serde_json::from_str(&json)?;
             Ok(trace_v)
         }
     }
 
-    fn convert_deltas(shipper_abi: &ABIEOS, delta_hex: &[u8]) -> Result<Vec<TableDeltaEx>> {
+    fn convert_deltas(shipper_abi: &Abieos, delta_hex: &[u8]) -> Result<Vec<TableDeltaEx>> {
         if delta_hex.len() == 0 {
             Ok(vec![])
         } else {
-            let json = shipper_abi.hex_to_json("eosio", "table_delta[]", delta_hex)?;
+            let json = shipper_abi.hex_to_json("eosio", "table_delta[]", String::from_utf8(delta_hex.to_vec())?).unwrap();
             let deltas: Vec<TableDeltas> = serde_json::from_str(&json)?;
             let mut delta_ex: Vec<TableDeltaEx> = Vec::with_capacity(deltas.len());
             for delta in deltas {
@@ -329,7 +329,7 @@ impl ShipResultsEx {
                             if ROWTYPES.contains(&name) {
                                 // println!("{}",name);
                                 let _json =
-                                    shipper_abi.hex_to_json("eosio", &name, row.data.as_bytes())?;
+                                    shipper_abi.hex_to_json("eosio", &name, row.data).unwrap();
                                 let json = format!("{{\"{}\":{}}}", &name, _json);
                                 //println!("{}", json);
                                 let r: TableRowTypes = serde_json::from_str(&json)?;
@@ -354,8 +354,8 @@ impl ShipResultsEx {
     }
 
     // v0 only has a signed_block_v0 .. v1 contains a variant here
-    fn convert_block_v0(shipper_abi: &ABIEOS, block_hex: &[u8]) -> Result<SignedBlock> {
-        let json = shipper_abi.hex_to_json("eosio", "signed_block", block_hex)?;
+    fn convert_block_v0(shipper_abi: &Abieos, block_hex: &[u8]) -> Result<SignedBlock> {
+        let json = shipper_abi.hex_to_json("eosio", "signed_block", String::from_utf8(block_hex.to_vec())?).unwrap();
         let signed_block: SignedBlockV0 = serde_json::from_str(&json)?;
         Ok(SignedBlock::signed_block_v0(signed_block))
     }
@@ -785,12 +785,12 @@ pub struct PackedTransactionV0 {
 }
 
 impl PackedTransactionV0 {
-    fn convert_trx(&self, shipper_abi: &ABIEOS) -> Option<Transaction> {
+    fn convert_trx(&self, shipper_abi: &Abieos) -> Option<Transaction> {
         if self.packed_trx.len() != 0 {
             match self.compression {
                 0 => {
                     let json = shipper_abi
-                        .hex_to_json("eosio", "transaction", self.packed_trx.as_bytes())
+                        .hex_to_json("eosio", "transaction", self.packed_trx.clone())
                         .unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     //self.transaction= Some(trace_v);
@@ -802,7 +802,7 @@ impl PackedTransactionV0 {
                     let mut buffer = Vec::new();
                     d.read_to_end(&mut buffer).unwrap();
                     let json = shipper_abi
-                        .bin_to_json("eosio", "transaction", &buffer)
+                        .bin_to_json("eosio", "transaction", buffer)
                         .unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     Some(trace_v)
@@ -820,7 +820,32 @@ impl PackedTransactionV0 {
         }
     }
 }
-
+pub fn hex_to_bin(hex: &str) -> Vec<u8> {
+    let mut bin: Vec<u8> = Vec::with_capacity(hex.len() / 2);
+    let bytes = hex.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = hex_to_bin_char(bytes[i]).checked_shl(4).unwrap() + hex_to_bin_char(bytes[i + 1]);
+        i += 2;
+        bin.push(b);
+    }
+    bin
+}
+fn hex_to_bin_char(c: u8) -> u8 {
+    if (b'a'..=b'z').contains(&c) {
+        let v: u8 = (c - b'a') + 10;
+        return v;
+    }
+    if (b'A'..=b'Z').contains(&c) {
+        let v: u8 = (c - b'A') + 10;
+        return v;
+    }
+    if (b'0'..=b'9').contains(&c) {
+        let v = c - b'0';
+        return v;
+    }
+    0
+}
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PackedTransactionV1 {
     pub compression: u8,
@@ -829,12 +854,12 @@ pub struct PackedTransactionV1 {
 }
 
 impl PackedTransactionV1 {
-    fn convert_trx(&self, shipper_abi: &ABIEOS) -> Option<Transaction> {
+    fn convert_trx(&self, shipper_abi: &Abieos) -> Option<Transaction> {
         if self.packed_trx.len() != 0 {
             match self.compression {
                 0 => {
                     let json = shipper_abi
-                        .hex_to_json("eosio", "transaction", self.packed_trx.as_bytes())
+                        .hex_to_json("eosio", "transaction", self.packed_trx.clone())
                         .unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     Some(trace_v)
@@ -845,7 +870,7 @@ impl PackedTransactionV1 {
                     let mut buffer = Vec::new();
                     d.read_to_end(&mut buffer).unwrap();
                     let json = shipper_abi
-                        .bin_to_json("eosio", "transaction", &buffer)
+                        .bin_to_json("eosio", "transaction", buffer)
                         .unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     Some(trace_v)
@@ -979,7 +1004,7 @@ impl Serialize for SignedBlock {
 }
 
 impl SignedBlock {
-    pub fn get_trx(&self, shipper_abi: &ABIEOS) -> Vec<Option<Transaction>> {
+    pub fn get_trx(&self, shipper_abi: &Abieos) -> Vec<Option<Transaction>> {
         let mut vo_t: Vec<Option<Transaction>> = vec![];
         match self {
             SignedBlock::signed_block_v0(k) => {
@@ -1478,7 +1503,58 @@ pub struct AccountV0 {
     pub creation_date: DateTime<Utc>,
     pub abi: String,
 }
+pub mod eosio_datetime_format {
+    use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer};
 
+    const FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
+
+    // The signature of a serialize_with function must follow the pattern:
+    //
+    //    fn serialize<S>(&T, S) -> Result<S::Ok, S::Error>
+    //    where
+    //        S: Serializer
+    //
+    // although it may also be generic over the input types T.
+    #[allow(dead_code)]
+    pub fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = format!("{}", date.format(FORMAT));
+        serializer.serialize_str(&s)
+    }
+
+    // The signature of a deserialize_with function must follow the pattern:
+    //
+    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
+    //    where
+    //        D: Deserializer<'de>
+    //
+    // although it may also be generic over the output types T.
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: String = String::deserialize(deserializer)?;
+        let len = s.len();
+        let slice_len = if s.contains('.') {
+            len.saturating_sub(4)
+        } else {
+            len
+        };
+
+        // match Utc.datetime_from_str(&s, FORMAT) {
+        let sliced = &s[0..slice_len];
+        match NaiveDateTime::parse_from_str(sliced, FORMAT) {
+            Err(_e) => {
+                eprintln!("DateTime Fail {} {:#?}", sliced, _e);
+                Err(serde::de::Error::custom(_e))
+            }
+            Ok(dt) => Ok(Utc.from_utc_datetime(&dt)),
+        }
+    }
+}
 #[allow(non_camel_case_types)]
 #[derive(Debug, Deserialize)]
 pub enum ResourceUsage {

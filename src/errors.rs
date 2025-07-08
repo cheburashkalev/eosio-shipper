@@ -24,7 +24,6 @@ error_chain! {
     foreign_links {
         UTF8(std::string::FromUtf8Error);
         Tungtentie(tokio_tungstenite::tungstenite::error::Error);
-        LibABIEOS(libabieos_sys::errors::Error);
         SerdeJson(serde_json::error::Error);
     }
     errors {
