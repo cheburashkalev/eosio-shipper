@@ -9,9 +9,10 @@ use crate::errors::Result;
 use chrono::{DateTime, Utc};
 use flate2::read::ZlibDecoder;
 use log::*;
+use rs_abieos::Abieos;
+use serde_json::{json, Value};
 use std::fmt;
 use std::io::prelude::*;
-use rs_abieos::Abieos;
 
 lazy_static! {
     static ref ROWTYPES: HashSet<String> = vec![
@@ -83,7 +84,7 @@ impl ShipRequests {
             let hex = format!("{:02x}", b);
             s += hex.as_str();
         }
-        let json = shipper_abi.hex_to_json("eosio", "request", s).unwrap();
+        let json = hex_to_json(shipper_abi, "eosio", "request", s).unwrap();
 
         let sr: ShipRequests = serde_json::from_str(&json)?;
         Ok(sr)
@@ -128,7 +129,9 @@ impl GetStatusRequestV0 {
         };
         let _json = serde_json::to_string(&r)?;
         let json = "[\"get_status_request_v0\",{}]";
-        let trx = shipper_abi.json_to_bin("eosio", "request", json.to_string()).unwrap();
+        let trx = shipper_abi
+            .json_to_bin("eosio", "request", json.to_string())
+            .unwrap();
 
         Ok(trx)
     }
@@ -215,15 +218,75 @@ pub enum ShipResultsEx {
     Status(GetStatusResponseV0),
     BlockResult(GetBlocksResultV0Ex),
 }
+fn transform_value(value: &Value) -> Value {
+    match value {
+        Value::Array(arr) => {
+            // Проверяем массивы вида [String, Any]
+            if arr.len() == 2 {
+                if let Value::String(key) = &arr[0] {
+                    let transformed_value = transform_value(&arr[1].clone());
+                    return Value::Object(serde_json::Map::from_iter(
+                        vec![(key.clone(), transformed_value)]
+                    ));
+                }
+            }
 
+            // Обрабатываем все элементы массива рекурсивно
+            Value::Array(arr.iter().map(|value:&Value|transform_value(&*value)).collect())
+        }
+        Value::Object(obj) => {
+            // Рекурсивно преобразуем каждое значение в объекте
+            Value::Object(
+                obj.into_iter()
+                    .map(|(k, v)| ((*k).clone(), transform_value(v)))
+                    .collect()
+            )
+        }
+        _ => (*value).clone(), // Примитивы оставляем без изменений
+    }
+}
+fn get_second_element(json_str: String) -> serde_json::error::Result<Option<String>> {
+    let json_try:Value = serde_json::from_str(&json_str)?;
+    let res_json = transform_value(&json_try);
+    //let ok_json = json!({"timestamp":"2024-04-01T18:43:16.500","producer":"bp1","confirmed":0,"previous":"0000077206B0A0FEB7E5673DB3B870554FD407CAC0B1F2FE7FB49A47ED2A6C06","transaction_mroot":"1FE31E9F8BB467B461375C9EAA2AFC7BC07BA583C47025864F448969E512F26E","action_mroot":"7C739463C185E464C5D2E0E7864AE44747708A167EFE48C44D0345937B4574C8","schedule_version":1,"new_producers":null,"header_extensions":[],"producer_signature":"SIG_K1_KaDjAzKWdh2EkSsXgn2nDT5Tn252MgoVb7QLfPc5H3CM8MsYbsUFC7379126RCgcjE4kP993YJKrVRrT3h8rEnroQstU7o","transactions":[{"status":0,"cpu_usage_us":594,"net_usage_words":0,"trx":["transaction_id","FBD2C02959EE00110D5C30BAC0254864DB597B5AAFC21EE644C8DD35ED1F7776"]}],"block_extensions":[]});
+    //if res_json.to_string().eq(&ok_json.to_string()) {
+    //    println!("BAN");
+    //}
+    return Ok(Some(res_json.to_string()));
+}
+pub fn hex_to_json(abi_eos: &Abieos, account: &str, datatype: &str, hex: String) -> Result<String> {
+    let json = abi_eos.hex_to_json(account, datatype, hex).unwrap();
+    match get_second_element(json) {
+        Ok(j) => match j {
+            Some(j) => Ok(j),
+            None => return Err("This is not JSON".into()),
+        },
+        Err(e) => return Err(e.into()),
+    }
+}
+pub fn bin_to_json(abi_eos: &Abieos, account: &str, datatype: &str, bin: Vec<u8>) -> Result<String> {
+    let mut json:String = String::new();
+    match abi_eos.bin_to_json(account, datatype, bin){
+        Ok(v)=>{json = v},
+        Err(e)=>{return Err(e.to_string().into())}
+    }
+
+    match get_second_element(json) {
+        Ok(j) => match j {
+            Some(j) => Ok(j),
+            None => return Err("This is not JSON".into()),
+        },
+        Err(e) => return Err(e.into()),
+    }
+}
 impl ShipResultsEx {
     pub fn from_bin(shipper_abi: &Abieos, bin: &[u8]) -> Result<ShipResultsEx> {
         let mut s: String = String::from("");
-        for b in bin {
+        bin.iter().for_each(|b|{
             let hex = format!("{:02x}", b);
             s += hex.as_str();
-        }
-        let json = shipper_abi.hex_to_json("eosio", "result", s).unwrap();
+        });
+        let json = hex_to_json(shipper_abi, "eosio", "result", s).unwrap();
         debug!("{}", json);
         let sr: ShipResults = serde_json::from_str(&json)?;
         match sr {
@@ -239,17 +302,14 @@ impl ShipResultsEx {
                 let (block, trans) = match br.block {
                     None => (None, vec![]),
                     Some(t) => {
-
-                        let sb =
-                            ShipResultsEx::convert_block_v0(shipper_abi, &t.as_bytes());
-                        let sb_ = match sb {
-                            Ok(x) => x,
-                            Err(y) =>
-                                {
-                                    //println!("{y}");
-                                    panic!()
-                                },
-                        };
+                        let sb_ = ShipResultsEx::convert_block_v0(shipper_abi, &t.as_bytes()).unwrap();
+                        //let sb_ = match sb {
+                        //    Ok(x) => x,
+                        //    Err(y) => {
+                        //        //println!("{y}");
+                        //        panic!("{:?}",y)
+                        //    }
+                        //};
                         let v_ot: Vec<Option<Transaction>> = sb_.get_trx(shipper_abi);
                         (Some(sb_), v_ot)
                     }
@@ -306,7 +366,13 @@ impl ShipResultsEx {
         if trace_hex.len() == 0 {
             Ok(vec![])
         } else {
-            let json = shipper_abi.hex_to_json("eosio", "transaction_trace[]", String::from_utf8(trace_hex.to_vec())?).unwrap();
+            let json = hex_to_json(
+                shipper_abi,
+                "eosio",
+                "transaction_trace[]",
+                String::from_utf8(trace_hex.to_vec())?,
+            )
+            .unwrap();
             //println!("{}", json);
             let trace_v: Vec<Traces> = serde_json::from_str(&json)?;
             Ok(trace_v)
@@ -317,7 +383,13 @@ impl ShipResultsEx {
         if delta_hex.len() == 0 {
             Ok(vec![])
         } else {
-            let json = shipper_abi.hex_to_json("eosio", "table_delta[]", String::from_utf8(delta_hex.to_vec())?).unwrap();
+            let json = hex_to_json(
+                shipper_abi,
+                "eosio",
+                "table_delta[]",
+                String::from_utf8(delta_hex.to_vec())?,
+            )
+            .unwrap();
             let deltas: Vec<TableDeltas> = serde_json::from_str(&json)?;
             let mut delta_ex: Vec<TableDeltaEx> = Vec::with_capacity(deltas.len());
             for delta in deltas {
@@ -329,7 +401,7 @@ impl ShipResultsEx {
                             if ROWTYPES.contains(&name) {
                                 // println!("{}",name);
                                 let _json =
-                                    shipper_abi.hex_to_json("eosio", &name, row.data).unwrap();
+                                    hex_to_json(shipper_abi, "eosio", &name, row.data).unwrap();
                                 let json = format!("{{\"{}\":{}}}", &name, _json);
                                 //println!("{}", json);
                                 let r: TableRowTypes = serde_json::from_str(&json)?;
@@ -355,8 +427,14 @@ impl ShipResultsEx {
 
     // v0 only has a signed_block_v0 .. v1 contains a variant here
     fn convert_block_v0(shipper_abi: &Abieos, block_hex: &[u8]) -> Result<SignedBlock> {
-        let json = shipper_abi.hex_to_json("eosio", "signed_block", String::from_utf8(block_hex.to_vec())?).unwrap();
-        let signed_block: SignedBlockV0 = serde_json::from_str(&json)?;
+        let json = hex_to_json(
+            shipper_abi,
+            "eosio",
+            "signed_block",
+            String::from_utf8(block_hex.to_vec())?,
+        )
+        .unwrap();
+        let signed_block: SignedBlockV0 = serde_json::from_str(&json).unwrap();
         Ok(SignedBlock::signed_block_v0(signed_block))
     }
 }
@@ -393,7 +471,7 @@ pub struct GetBlocksResultV1 {
     pub traces: Option<String>,
     pub deltas: Option<String>,
 }
-
+#[repr(align(128))]
 #[derive(Debug, Deserialize)]
 pub struct GetBlocksResultV0Ex {
     pub head: BlockPosition,
@@ -789,9 +867,10 @@ impl PackedTransactionV0 {
         if self.packed_trx.len() != 0 {
             match self.compression {
                 0 => {
-                    let json = shipper_abi
-                        .hex_to_json("eosio", "transaction", self.packed_trx.clone())
-                        .unwrap();
+                    let json =
+                        hex_to_json(shipper_abi, "eosio", "transaction", self.packed_trx.clone())
+                            .unwrap();
+
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     //self.transaction= Some(trace_v);
                     Some(trace_v)
@@ -801,9 +880,7 @@ impl PackedTransactionV0 {
                     let mut d = ZlibDecoder::new(bin_compressed_trx.as_slice());
                     let mut buffer = Vec::new();
                     d.read_to_end(&mut buffer).unwrap();
-                    let json = shipper_abi
-                        .bin_to_json("eosio", "transaction", buffer)
-                        .unwrap();
+                    let json = bin_to_json(shipper_abi, "eosio", "transaction", buffer).unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     Some(trace_v)
                 }
@@ -858,9 +935,9 @@ impl PackedTransactionV1 {
         if self.packed_trx.len() != 0 {
             match self.compression {
                 0 => {
-                    let json = shipper_abi
-                        .hex_to_json("eosio", "transaction", self.packed_trx.clone())
-                        .unwrap();
+                    let json =
+                        hex_to_json(shipper_abi, "eosio", "transaction", self.packed_trx.clone())
+                            .unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     Some(trace_v)
                 }
@@ -869,9 +946,7 @@ impl PackedTransactionV1 {
                     let mut d = ZlibDecoder::new(bin_compressed_trx.as_slice());
                     let mut buffer = Vec::new();
                     d.read_to_end(&mut buffer).unwrap();
-                    let json = shipper_abi
-                        .bin_to_json("eosio", "transaction", buffer)
-                        .unwrap();
+                    let json = bin_to_json(shipper_abi, "eosio", "transaction", buffer).unwrap();
                     let trace_v: Transaction = serde_json::from_str(&json).unwrap();
                     Some(trace_v)
                 }
