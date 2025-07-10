@@ -956,8 +956,6 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "rs_abieos"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0430cae7cf81f3139a7d8c2ce99194118a10548ed8b29ca0fffe49344b36385"
 dependencies = [
  "bindgen",
  "cc",

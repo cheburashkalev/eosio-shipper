@@ -48,10 +48,10 @@ pub struct Checksum256 {
 impl Checksum256 {
     pub fn to_string(&self) -> String {
         let mut hex_string = String::from("");
-        for v in &self.value {
+        self.value.iter().for_each(|v|{
             let hex = format!("{:02x}", v);
             hex_string += hex.as_str();
-        }
+        });
         hex_string
     }
 }
@@ -80,10 +80,10 @@ pub enum ShipRequests {
 impl ShipRequests {
     pub fn from_bin(shipper_abi: &Abieos, bin: &[u8]) -> Result<ShipRequests> {
         let mut s: String = String::from("");
-        for b in bin {
+        bin.iter().for_each(|b| {
             let hex = format!("{:02x}", b);
             s += hex.as_str();
-        }
+        });
         let json = hex_to_json(shipper_abi, "eosio", "request", s).unwrap();
 
         let sr: ShipRequests = serde_json::from_str(&json)?;
@@ -392,19 +392,19 @@ impl ShipResultsEx {
             .unwrap();
             let deltas: Vec<TableDeltas> = serde_json::from_str(&json)?;
             let mut delta_ex: Vec<TableDeltaEx> = Vec::with_capacity(deltas.len());
-            for delta in deltas {
+            deltas.iter().for_each(|delta| {
                 match delta {
                     TableDeltas::table_delta_v0(td0) => {
-                        let name = td0.name;
+                        let name = td0.name.clone();
                         let mut row_ex: Vec<TableRowEx> = Vec::with_capacity(td0.rows.len());
-                        for row in td0.rows {
+                        td0.rows.iter().for_each(|row| {
                             if ROWTYPES.contains(&name) {
                                 // println!("{}",name);
                                 let _json =
-                                    hex_to_json(shipper_abi, "eosio", &name, row.data).unwrap();
+                                    hex_to_json(shipper_abi, "eosio", &name, row.data.clone()).unwrap();
                                 let json = format!("{{\"{}\":{}}}", &name, _json);
                                 //println!("{}", json);
-                                let r: TableRowTypes = serde_json::from_str(&json)?;
+                                let r: TableRowTypes = serde_json::from_str(&json).unwrap();
                                 row_ex.push(TableRowEx {
                                     present: row.present,
                                     data: r,
@@ -412,15 +412,15 @@ impl ShipResultsEx {
                             } else {
                                 row_ex.push(TableRowEx {
                                     present: row.present,
-                                    data: TableRowTypes::Other(row.data),
+                                    data: TableRowTypes::Other(row.data.clone()),
                                 });
                             }
-                        }
+                        });
                         let td_ex = TableDeltaEx { name, rows: row_ex };
                         delta_ex.push(td_ex);
                     }
                 }
-            }
+            });
             Ok(delta_ex)
         }
     }
@@ -1084,7 +1084,7 @@ impl SignedBlock {
         match self {
             SignedBlock::signed_block_v0(k) => {
                 //  let mut kt = k.transactions.clone();
-                for t in &k.transactions {
+                k.transactions.iter().for_each(|t| {
                     match &t.trx {
                         TransactionVariantV0::transaction_id(_) => {
                             vo_t.push(None);
@@ -1098,11 +1098,11 @@ impl SignedBlock {
                             vo_t.push(transaction);
                         }
                     }
-                }
+                });
             }
             SignedBlock::signed_block_v1(k) => {
                 // let mut kt = k.transactions.clone();
-                for t in &k.transactions {
+                k.transactions.iter().for_each(|t| {
                     match &t.trx {
                         TransactionVariantV1::transaction_id(_tt) => vo_t.push(None),
                         TransactionVariantV1::packed_transaction_v1(pt) => {
@@ -1110,7 +1110,7 @@ impl SignedBlock {
                             vo_t.push(transaction);
                         }
                     }
-                }
+                });
             }
         }
         vo_t
