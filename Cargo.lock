@@ -271,7 +271,7 @@ dependencies = [
 
 [[package]]
 name = "eosio-shipper-gf"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "base64-serde",
  "cc",
@@ -955,9 +955,9 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "rs_abieos_gf"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de227f531395906874b30fc0e3bebaa14d219d1303c5a0d9008fa1a710f5840e"
+checksum = "9eb066a2ce3b0dd12385f163d319e1c4a4fb4c8506c3abe0d05065376d4d46e8"
 dependencies = [
  "bindgen",
  "cc",
