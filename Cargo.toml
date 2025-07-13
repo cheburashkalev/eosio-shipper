@@ -1,6 +1,6 @@
 [package]
 name = "eosio-shipper-gf"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Ian Holsman <ian@holsman.com.au>","Andrei Levchenko <duxan.lev@gmail.com>"]
 edition = "2024"
 keywords = ["eosio", "blockchain"]
