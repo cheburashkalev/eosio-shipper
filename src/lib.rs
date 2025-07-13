@@ -1,7 +1,7 @@
 use error_chain::ChainedError;
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, SinkExt, StreamExt};
-use rs_abieos::{abieos, Abieos};
+use rs_abieos_gf::{abieos, Abieos};
 //use log::*;
 //use std::io::prelude::*;
 use rust_embed::RustEmbed;

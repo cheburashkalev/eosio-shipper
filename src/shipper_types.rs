@@ -9,7 +9,7 @@ use crate::errors::Result;
 use chrono::{DateTime, Utc};
 use flate2::read::ZlibDecoder;
 use log::*;
-use rs_abieos::Abieos;
+use rs_abieos_gf::Abieos;
 use serde_json::{json, Value};
 use std::fmt;
 use std::io::prelude::*;
